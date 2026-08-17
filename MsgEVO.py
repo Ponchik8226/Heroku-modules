@@ -2,9 +2,9 @@ from .. import loader, utils
 
 
 @loader.tds
-class MsgEvo(loader.Module):
+class MsgEVO(loader.Module):
     """Модуль для отправки запросов боту @mine_evo_bot"""
-    strings = {"name": "MsgEvo"}
+    strings = {"name": "MsgEVO"}
 
     @loader.command(ru_doc="[запрос] — Отправить запрос боту")
     async def evocmd(self, message):
