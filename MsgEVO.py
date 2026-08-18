@@ -1,6 +1,5 @@
 from .. import loader, utils
 
-
 @loader.tds
 class MsgEVO(loader.Module):
     """Модуль для отправки запросов боту @mine_evo_bot"""
