@@ -36,18 +36,13 @@ class AutoLimits(loader.Module):
         if self.get("achk_every") is None:
             self.set("achk_every", 10)
 
-        await utils.asset_channel(
-            self._client, "hikka-logs", "Логи юзербота",
-            silent=True, archive=False, _folder="hikka",
-        )
-
         found_old = None
         found_new = None
         async for dialog in self._client.iter_dialogs():
             title = getattr(dialog.entity, 'title', '')
             if title == 'mlimits':
                 found_old = dialog.entity
-            elif title == 'EvoLim':
+            elif title == 'Evo limits':
                 found_new = dialog.entity
             if found_old and found_new:
                 break
@@ -58,7 +53,7 @@ class AutoLimits(loader.Module):
             self._evo_channel = found_old
             try:
                 await self._client(functions.channels.EditTitleRequest(
-                    channel=self._evo_channel, title='EvoLim'
+                    channel=self._evo_channel, title='Evo limits'
                 ))
             except Exception:
                 pass
@@ -128,14 +123,18 @@ class AutoLimits(loader.Module):
         while True:
             self.got_cooldown = False
             self.got_success = False
+            self.got_no_money = False
             self.limitss = ""
             self.last_send = time.time()
             await self._client.send_message(self._evo_channel, f"Перевести {player} {limitp}")
 
             for _ in range(10):
                 await asyncio.sleep(0.5)
-                if self.got_cooldown or self.limitss or self.got_success:
+                if self.got_cooldown or self.limitss or self.got_success or self.got_no_money:
                     break
+
+            if self.got_no_money:
+                return False
 
             if self.got_cooldown:
                 elapsed = time.time() - self.last_send
@@ -152,8 +151,7 @@ class AutoLimits(loader.Module):
                 return True
 
             if self.got_success:
-                # Лимит игрока выше суммы проверки — проверочная сумма прошла как реальный перевод,
-                # продолжаем переводить ею же
+                # Лимит игрока выше суммы проверки проверочная сумма прошла как реальный перевод, продолжаем переводить ею же
                 self.limitss = limitp
                 return True
 
@@ -169,6 +167,9 @@ class AutoLimits(loader.Module):
             await asyncio.sleep(0.5)
             if self.got_cooldown or self.got_no_money:
                 break
+
+        if self.got_no_money:
+            return
 
         elapsed = time.time() - self.last_send
         if self.got_cooldown:
@@ -202,12 +203,19 @@ class AutoLimits(loader.Module):
     async def _run_loop(self, player, total, done, message, status_msg=None):
         since_last_chk = 0
         limits = total - done
-        limitsf_str = str(total)
 
         while self.running and limits > 0:
             if self.get("achk") and since_last_chk >= self.get("achk_every"):
                 since_last_chk = 0
-                await self._check_limit(player)
+                if not await self._check_limit(player):
+                    self.running = False
+                    no_money_msg = (
+                        f"<emoji document_id=5240241223632954241>🚫</emoji> <b>Недостаточно денег для перевода игроку <code>{player}</code>!\n"
+                        f"Переведено: <code>{done}</code>/<code>{total}</code></b>"
+                    )
+                    if status_msg:
+                        return await status_msg.edit(no_money_msg)
+                    return await utils.answer(message, no_money_msg)
                 self.db.set(self.name, "limitss", self.limitss)
                 await self._wait_after_transfer()
                 if not self.running:
@@ -270,6 +278,10 @@ class AutoLimits(loader.Module):
         status_msg = await utils.answer(message, f"<emoji document_id=5215239948420003628>💵</emoji> <b>Проверяю лимит у бота...</b>")
 
         if not await self._check_limit(player, status_msg):
+            if self.got_no_money:
+                return await status_msg.edit(
+                    f"<emoji document_id=5240241223632954241>🚫</emoji> <b>Недостаточно денег для перевода игроку <code>{player}</code>!</b>"
+                )
             return await status_msg.edit("🚫 <b>Не удалось получить сумму лимита от бота</b>")
 
         self.db.set(self.name, "limitss", self.limitss)
